@@ -7,7 +7,7 @@ use parry2d::{
 
 #[test]
 fn capsule_convergence() {
-    let p = Point::from(Vector::y() * 10.0);
+    let p = Point::from(Vector::y() * 5.0);
 
     let shape1 = Capsule::new(-p, p, 10.0);
     let mut vec = Vec::<Point<Real>>::with_capacity(3);
