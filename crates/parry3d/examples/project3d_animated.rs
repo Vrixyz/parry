@@ -46,12 +46,12 @@ async fn main_loop(ctx: macroquad::Context) {
     let sphere = Sphere::new(0.1, 18, 10);
     let sphere_vertices_count = sphere.vertices.len();
     let mut sphere_mesh = ctx.mesh(
-        CpuMesh(
-            sphere.vertices,
-            vec![vec2(0.0, 0.0); sphere_vertices_count],
-            sphere.normals,
-            sphere.indices,
-        ),
+        CpuMesh {
+            vertices: sphere.vertices,
+            uvs: vec![vec2(0.0, 0.0); sphere_vertices_count],
+            normals: sphere.normals,
+            indices: sphere.indices,
+        },
         None,
     );
     let shader = Shader::new(
@@ -169,8 +169,7 @@ async fn main_loop(ctx: macroquad::Context) {
 
         scene.draw(&camera);
         draw_gizmos(&camera);
-
-        canvas.draw();
+        ctx.blit_canvas(&mut canvas);
 
         next_frame().await
     }
@@ -183,12 +182,12 @@ fn mquad_mesh_from_parry(indices: &Vec<[u32; 3]>, points: &Vec<Point3<Real>>) ->
     let mesh = compute_mesh_with_normals_per_face(&m_vertices, &m_indices);
 
     let nb_vertices = mesh.vertices.len();
-    let cpu_mesh = CpuMesh(
-        mesh.vertices,
-        vec![vec2(0.0, 0.0); nb_vertices],
-        mesh.normals,
-        mesh.indices,
-    );
+    let cpu_mesh = CpuMesh {
+        vertices: mesh.vertices,
+        uvs: vec![vec2(0.0, 0.0); nb_vertices],
+        normals: mesh.normals,
+        indices: mesh.indices,
+    };
     cpu_mesh
 }
 
