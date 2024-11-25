@@ -8,42 +8,21 @@ use na::{Point3, Vector3};
 use obj::{Obj, ObjData};
 use parry3d::{
     math::Real,
-    shape::{SharedShape, TriMesh, TriMeshFlags},
+    shape::{Shape, SharedShape, TriMesh, TriMeshFlags},
 };
 
 #[macroquad::main("parry2d::utils::point_in_poly2d")]
 async fn main() {
-    /*
-     * Initialize the shapes.
-     */
-    let Obj {
-        data: ObjData {
-            position, objects, ..
-        },
-        ..
-    } = Obj::load("assets/tests/stairs.obj").unwrap();
-
-    let mut bunny_mesh = TriMesh::with_flags(
-        position
-            .iter()
-            .map(|v| Point3::new(v[0] as Real, v[1] as Real, v[2] as Real))
-            .collect::<Vec<_>>(),
-        objects[0].groups[0]
-            .polys
-            .iter()
-            .map(|p| [p.0[0].0 as u32, p.0[1].0 as u32, p.0[2].0 as u32])
-            .collect::<Vec<_>>(),
-        TriMeshFlags::all(),
-    )
-    .unwrap();
     clear_background(BLACK);
 
     easy_draw_text("Please wait while convex decomposition is being computed...");
     next_frame().await;
-    let mesh_vertices = bunny_mesh.vertices();
-    let mesh_indices = bunny_mesh.indices();
-    let convex_mesh = SharedShape::convex_decomposition(&mesh_vertices, &mesh_indices);
-    let trimesh_convex_compound = convex_mesh.as_compound().unwrap();
+    let cube1 = parry3d::shape::Cuboid::new(na::Vector3::repeat(0.5)).to_trimesh();
+    dbg!("before convex");
+    let convex_mesh = SharedShape::convex_decomposition(&cube1.0, &cube1.1);
+
+    dbg!("after convex, taking a loong time");
+    let trimesh_convex_compound = convex_mesh.0.as_compound().unwrap();
 
     loop {
         clear_background(BLACK);
