@@ -6,7 +6,7 @@ use common_macroquad3d::{easy_draw_text, hue_to_rgb, mquad_mesh_from_points};
 use macroquad::prelude::*;
 use parry3d::shape::SharedShape;
 
-#[macroquad::main("parry2d::utils::point_in_poly2d")]
+#[macroquad::main("convex_decomposition")]
 async fn main() {
     clear_background(BLACK);
 
