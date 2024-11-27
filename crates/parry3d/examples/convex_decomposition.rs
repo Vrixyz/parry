@@ -4,12 +4,7 @@ extern crate nalgebra as na;
 
 use common_macroquad3d::{easy_draw_text, hue_to_rgb, mquad_mesh_from_points};
 use macroquad::prelude::*;
-use na::{Point3, Vector3};
-use obj::{Obj, ObjData};
-use parry3d::{
-    math::Real,
-    shape::{Shape, SharedShape, TriMesh, TriMeshFlags},
-};
+use parry3d::shape::SharedShape;
 
 #[macroquad::main("parry2d::utils::point_in_poly2d")]
 async fn main() {
