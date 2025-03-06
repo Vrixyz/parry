@@ -9,7 +9,7 @@ mod tests;
 
 use core::any::TypeId;
 
-use function_dispatch::DispatcherTypeKey;
+use function_dispatch::{DispatcherTypeKey, FunctionDispatch};
 
 use crate::math::{Isometry, Point, Real, Vector};
 use crate::query::details::ShapeCastOptions;
@@ -26,180 +26,22 @@ use crate::query::{
 use crate::shape::*;
 
 /// A dispatcher that exposes built-in queries
-#[derive(Debug, Clone)]
-pub struct ComposableQueryDispatcher;
+#[derive(Debug)]
+pub struct ComposableQueryDispatcher<'c, 'a: 'c, 'b: 'c> {
+    intersection_functions: FunctionDispatch<'c, 'a, 'b>,
+}
 
-impl QueryDispatcher for ComposableQueryDispatcher {
+impl<'c, 'a: 'c, 'b: 'c> QueryDispatcher for ComposableQueryDispatcher<'c, 'a, 'b> {
     fn intersection_test(
         &self,
         pos12: &Isometry<Real>,
         shape1: &dyn Shape,
         shape2: &dyn Shape,
     ) -> Result<bool, Unsupported> {
-        /// Transform a function that takes two concrete shapes to a hashmap key value pair.
-        // TODO: this would be great to have as const, or a macro.
-        fn to_kv<'c, 'a, 'b, S1: Shape + 'a, S2: Shape + 'b>(
-            inner: impl Fn(&Isometry<Real>, &'a S1, &'b S2) -> bool + 'c + Copy,
-        ) -> (
-            DispatcherTypeKey,
-            Box<dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()> + 'c>,
-        ) {
-            (
-                DispatcherTypeKey(TypeId::of::<S1>(), TypeId::of::<S2>()),
-                to_as_shape(inner),
-            )
-        }
-
-        /// Transform a function that takes two concrete shapes to a function that takes two dynamic shapes.
-        // TODO: this would be great to have as const, or a macro.
-        fn to_as_shape<'c, 'a, 'b, S1: Shape + 'a, S2: Shape + 'b>(
-            inner: impl Fn(&Isometry<Real>, &'a S1, &'b S2) -> bool + 'c + Copy,
-        ) -> Box<dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()> + 'c>
-        {
-            Box::new(
-                move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                    to_custom(
-                        |s: &'a dyn Shape| s.as_shape::<S1>(),
-                        |s: &'b dyn Shape| s.as_shape::<S2>(),
-                        inner,
-                    )(pose, s1, s2)
-                },
-            )
-        }
-        /// Transform a function that takes two concrete shapes to a function that takes two dynamic shapes.
-        // TODO: this would be great to have as const, or a macro.
-        fn to_custom<'c, 'a: 'c, 'b: 'c, ShapeIn1: 'a, ShapeIn2: 'b>(
-            shape_1: impl Fn(&'a dyn Shape) -> Option<ShapeIn1> + 'a,
-            shape_2: impl Fn(&'b dyn Shape) -> Option<ShapeIn2> + 'b,
-            inner: impl Fn(&Isometry<Real>, ShapeIn1, ShapeIn2) -> bool + 'c,
-        ) -> Box<dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()> + 'c>
-        {
-            Box::new(
-                move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                    let shape1 = shape_1(s1).ok_or(())?;
-                    let shape2 = shape_2(s2).ok_or(())?;
-                    Ok(inner(pose, shape1, shape2))
-                },
-            )
-        }
-
-        let mut intersection_test_impls: std::collections::HashMap<DispatcherTypeKey, _> =
-            std::collections::HashMap::new();
-        for (kv, function) in vec![
-            to_kv(query::details::intersection_test_cuboid_cuboid),
-            (
-                DispatcherTypeKey(TypeId::of::<Ball>(), TypeId::of::<Ball>()),
-                (Box::new(|pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                    Ok(query::details::intersection_test_ball_ball(
-                        &pose.translation.vector.into(),
-                        s1.as_ball().ok_or(())?,
-                        s2.as_ball().ok_or(())?,
-                    ))
-                })),
-            ),
-            to_kv(query::details::intersection_test_cuboid_triangle),
-            to_kv(query::details::intersection_test_triangle_cuboid),
-            (
-                DispatcherTypeKey(TypeId::of::<Ball>(), TypeId::of::<Cuboid>()),
-                Box::new(
-                    move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                        let shape1 = s1.as_ball().ok_or(())?;
-                        Ok(query::details::intersection_test_ball_point_query(
-                            pose, shape1, s2,
-                        ))
-                    },
-                ),
-            ),
-        ] {
-            assert!(intersection_test_impls.insert(kv, function).is_none());
-        }
-
-        let types = vec![
-            TypeId::of::<Ball>(),
-            TypeId::of::<Cuboid>(),
-            TypeId::of::<Capsule>(),
-            TypeId::of::<Triangle>(),
-            TypeId::of::<Segment>(),
-            TypeId::of::<Compound>(),
-            TypeId::of::<Polyline>(),
-            TypeId::of::<TriMesh>(),
-            TypeId::of::<HeightField>(),
-            #[cfg(feature = "dim2")]
-            #[cfg(feature = "std")]
-            TypeId::of::<ConvexPolygon>(),
-            #[cfg(feature = "dim3")]
-            #[cfg(feature = "std")]
-            TypeId::of::<ConvexPolyhedron>(),
-            #[cfg(feature = "dim3")]
-            TypeId::of::<Cylinder>(),
-            #[cfg(feature = "dim3")]
-            TypeId::of::<Cone>(),
-            #[cfg(feature = "dim3")]
-            TypeId::of::<HalfSpace>(),
-            TypeId::of::<RoundShape<Ball>>(),
-            TypeId::of::<RoundShape<Cuboid>>(),
-            TypeId::of::<RoundShape<Capsule>>(),
-            TypeId::of::<RoundShape<Triangle>>(),
-            TypeId::of::<RoundShape<Segment>>(),
-            TypeId::of::<RoundShape<Compound>>(),
-            TypeId::of::<RoundShape<Polyline>>(),
-            TypeId::of::<RoundShape<TriMesh>>(),
-            TypeId::of::<RoundShape<HeightField>>(),
-            #[cfg(feature = "dim2")]
-            #[cfg(feature = "std")]
-            TypeId::of::<RoundShape<ConvexPolygon>>(),
-            #[cfg(feature = "dim3")]
-            #[cfg(feature = "std")]
-            TypeId::of::<RoundShape<ConvexPolyhedron>>(),
-            #[cfg(feature = "dim3")]
-            TypeId::of::<RoundShape<Cylinder>>(),
-            #[cfg(feature = "dim3")]
-            TypeId::of::<RoundShape<Cone>>(),
-            TypeId::of::<RoundShape<HalfSpace>>(),
-            // TODO: DilatedShapes... (and dilatedShpaed of roundshapes) (.. and I guess roundshapes of dilatedshapes ; and then probably recursively...)
-        ];
-        for &type1 in types.iter() {
-            for &type2 in types.iter() {
-                let key = DispatcherTypeKey(type1, type2);
-                if intersection_test_impls.get(&key).is_none() {
-                    println!("key {key:?} not found!");
-                }
-            }
-        }
-        /*
-        // TODO: These composite shapes are harder to implement due to taking dispatcher as argument.
-        #[cfg(feature = "std")]
-        {
-            functions.push({
-                Box::new(
-                    move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                        let shape1 = (|s: &dyn Shape| s.as_composite_shape())(s1).ok_or(())?;
-                        let shape2 = (|s: &dyn Shape| Some(s))(s2).ok_or(())?;
-                        Ok(query::details::intersection_test_composite_shape_shape(
-                            self, pose, shape1, shape2,
-                        ))
-                    },
-                )
-            });
-            functions.push({
-                Box::new(
-                    move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                        let shape1 = (|s: &dyn Shape| Some(s))(s2).ok_or(())?;
-                        let shape2 = (|s: &dyn Shape| s.as_composite_shape())(s1).ok_or(())?;
-                        Ok(query::details::intersection_test_shape_composite_shape(
-                            self, pose, shape1, shape2,
-                        ))
-                    },
-                )
-            });
-        }*/
-
-        let param_types = DispatcherTypeKey(shape1.type_id(), shape2.type_id());
-        let Some(intersection_test_impl) = intersection_test_impls.get(&param_types) else {
-            dbg!("key not found!");
-            return Err(Unsupported);
-        };
-        intersection_test_impl(pos12, shape1, shape2).map_err(|_| Unsupported)
+        return self
+            .intersection_functions
+            .dispatch(pos12, shape1, shape2)
+            .map_err(|_| Unsupported);
     }
 
     /// Computes the minimum distance separating two shapes.
