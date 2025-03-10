@@ -1,16 +1,14 @@
+use core::any::TypeId;
+
 use crate::{
     math::Point,
     query::{self, QueryDispatcher},
+    shape::*,
 };
 
 use super::function_dispatch::FunctionDispatch;
 
-pub fn create_intersection_dispatcher<'d: 'a, 'a, 'c, 'b, D>(
-    d: &'d D,
-) -> FunctionDispatch<'a, 'c, 'b>
-where
-    D: ?Sized + QueryDispatcher,
-{
+pub fn create_intersection_dispatcher() -> FunctionDispatch {
     let mut dispatcher = FunctionDispatch::new();
 
     // Register intersection functions here.
@@ -24,29 +22,164 @@ where
         let p12 = Point::from(pos12.translation.vector);
         query::details::intersection_test_ball_ball(&p12, b1, b2)
     });
-    dispatcher.add_function_known_1(query::details::intersection_test_ball_point_query);
-    dispatcher.add_function_known_2(query::details::intersection_test_point_query_ball);
+    dispatcher.add_function_known_1x(
+        query::details::intersection_test_ball_point_query,
+        vec![
+            // TODO: add Tetrahedron once shape is implemented.
+            TypeId::of::<Cuboid>(),
+            TypeId::of::<Capsule>(),
+            TypeId::of::<Triangle>(),
+            TypeId::of::<Segment>(),
+            TypeId::of::<Polyline>(),
+            TypeId::of::<TriMesh>(),
+            TypeId::of::<HeightField>(),
+            #[cfg(feature = "dim2")]
+            TypeId::of::<ConvexPolygon>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<ConvexPolyhedron>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<Cylinder>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<Cone>(),
+            TypeId::of::<HalfSpace>(),
+            // RoundShapes
+            TypeId::of::<RoundShape<Cuboid>>(),
+            TypeId::of::<RoundShape<Capsule>>(),
+            TypeId::of::<RoundShape<Triangle>>(),
+            TypeId::of::<RoundShape<Segment>>(),
+            TypeId::of::<RoundShape<Polyline>>(),
+            TypeId::of::<RoundShape<TriMesh>>(),
+            TypeId::of::<RoundShape<HeightField>>(),
+            #[cfg(feature = "dim2")]
+            TypeId::of::<RoundShape<ConvexPolygon>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<ConvexPolyhedron>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<Cylinder>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<Cone>>(),
+            TypeId::of::<RoundShape<HalfSpace>>(),
+        ],
+    );
+    dispatcher.add_function_known_1x(
+        |pos12, halfspace: &HalfSpace, other| {
+            query::details::intersection_test_halfspace_support_map(
+                pos12,
+                halfspace,
+                other.as_support_map().expect("calling `as_support_map` on a non-support-map shape, make sure your type mapping is correct."),
+            )
+        },
+        vec![
+            TypeId::of::<Ball>(),
+            TypeId::of::<Capsule>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<Cone>(),
+            #[cfg(feature = "dim2")]
+            TypeId::of::<ConvexPolygon>(),
+            TypeId::of::<Cuboid>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<Cylinder>(),
+            TypeId::of::<Segment>(),
+            TypeId::of::<Triangle>(),
+            // RoundShapes
+            TypeId::of::<RoundShape<Ball>>(),
+            TypeId::of::<RoundShape<Capsule>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<Cone>>(),
+            #[cfg(feature = "dim2")]
+            TypeId::of::<RoundShape<ConvexPolygon>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<ConvexPolyhedron>>(),
+            TypeId::of::<RoundShape<Cuboid>>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<RoundShape<Cylinder>>(),
+            TypeId::of::<RoundShape<Segment>>(),
+            TypeId::of::<RoundShape<Triangle>>(),
+        ],
+    );
 
-    // Those can't work because SupportMap is not Shape...
-    // So we'd need to rely on Any...
-    // but then `Any`` doesn't support casting to traits easily:
-    //  - we'd need to box the shapes
-    //  - or use a trait to cast to the right trait?
-    dispatcher.add_function_known_1_and_support_map(
-        query::details::intersection_test_halfspace_support_map,
-    );
-    dispatcher.add_function_known_2_and_support_map(
-        query::details::intersection_test_support_map_halfspace,
-    );
-
-    dispatcher.add_function_all_unknown_support_map(
-        query::details::intersection_test_support_map_support_map,
-    );
     // TODO: add composite shapes
+    macro_rules! shape_impls {
+        ($($prefix:tt $inner:ty),*) => {
+            {
+                use std::collections::HashMap;
+                let mut types = HashMap::new();
+                $(
+                    register_shape!(types, $prefix $inner);
+                )*
+                types
+            }
+        };
+    }
+    macro_rules! register_shape {
+        ($types:expr, any $shape:ty) => {
+            _ = $types.insert(TypeId::of::<$shape>(), stringify!($shape));
+        };
+        ($types:tt, $f:tt $shape:ty) => {
+            #[cfg(feature = $f)]
+            assert!($types
+                .insert(TypeId::of::<$shape>(), stringify!($shape))
+                .is_none());
+        };
+    }
 
-    dispatcher
-        .add_function_composite_shape_1(d, query::details::intersection_test_composite_shape_shape);
-    dispatcher
-        .add_function_composite_shape_2(d, query::details::intersection_test_shape_composite_shape);
+    let shape_impls = shape_impls!(
+        any Ball,
+        any Cuboid,
+        any Capsule,
+        any Triangle,
+        any Segment,
+        any Compound,
+        any Polyline,
+        any TriMesh,
+        any HeightField,
+        "dim2" ConvexPolygon,
+        "dim3" ConvexPolyhedron,
+        "dim3" Cylinder,
+        "dim3" Cone,
+        any HalfSpace,
+        // Round shapes
+        any RoundShape::<Ball>,
+        any RoundShape::<Cuboid>,
+        any RoundShape::<Capsule>,
+        any RoundShape::<Triangle>,
+        any RoundShape::<Segment>,
+        any RoundShape::<Compound>,
+        any RoundShape::<Polyline>,
+        any RoundShape::<TriMesh>,
+        any RoundShape::<HeightField>,
+        "dim2" RoundShape::<ConvexPolygon>,
+        "dim3" RoundShape::<ConvexPolyhedron>,
+        "dim3" RoundShape::<Cylinder>,
+        "dim3" RoundShape::<Cone>,
+        any RoundShape::<HalfSpace>
+    );
+
+    for composite_type in vec![
+        TypeId::of::<Compound>(),
+        TypeId::of::<Polyline>(),
+        TypeId::of::<TriMesh>(),
+    ] {
+        for shape_type in shape_impls.iter() {
+            dispatcher.add_function_dyn_dispatcher(
+                |dispatcher, pos12, shape1, shape2| {
+                    query::details::intersection_test_composite_shape_shape(dispatcher,
+                        pos12,
+                        shape1.as_composite_shape().expect("calling `as_composite_shape` on a non-support-map shape, make sure your type mapping is correct."),
+                        shape2
+                    )
+                },
+                composite_type, *shape_type.0
+            );
+        }
+    }
+
+    for k in dispatcher.functions.keys() {
+        println!(
+            "({} {})",
+            shape_impls.get(&k.0).unwrap_or(&"not found"),
+            shape_impls.get(&k.1).unwrap_or(&"not found")
+        );
+    }
     dispatcher
 }

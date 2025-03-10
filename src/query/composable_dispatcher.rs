@@ -8,6 +8,7 @@ mod intersection;
 mod tests;
 
 use core::any::TypeId;
+use std::collections::HashMap;
 
 use function_dispatch::{DispatcherTypeKey, FunctionDispatch};
 
@@ -26,12 +27,13 @@ use crate::query::{
 use crate::shape::*;
 
 /// A dispatcher that exposes built-in queries
+
 #[derive(Debug)]
-pub struct ComposableQueryDispatcher<'c, 'a: 'c, 'b: 'c> {
-    intersection_functions: FunctionDispatch<'c, 'a, 'b>,
+pub struct ComposableQueryDispatcher {
+    pub intersections: FunctionDispatch,
 }
 
-impl<'c, 'a: 'c, 'b: 'c> QueryDispatcher for ComposableQueryDispatcher<'c, 'a, 'b> {
+impl QueryDispatcher for ComposableQueryDispatcher {
     fn intersection_test(
         &self,
         pos12: &Isometry<Real>,
@@ -39,8 +41,8 @@ impl<'c, 'a: 'c, 'b: 'c> QueryDispatcher for ComposableQueryDispatcher<'c, 'a, '
         shape2: &dyn Shape,
     ) -> Result<bool, Unsupported> {
         return self
-            .intersection_functions
-            .dispatch(pos12, shape1, shape2)
+            .intersections
+            .dispatch(self, pos12, shape1, shape2)
             .map_err(|_| Unsupported);
     }
 

@@ -5,90 +5,111 @@ use log::warn;
 
 use crate::{
     math::{Isometry, Real},
-    query::PointQuery,
-    shape::{Shape, SimdCompositeShape, SupportMap, TypedSimdCompositeShape},
+    query::QueryDispatcher,
+    shape::{RoundShape, Shape},
 };
+
+use super::ComposableQueryDispatcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DispatcherTypeKey(pub TypeId, pub TypeId);
 
-pub struct FunctionDispatch<'c, 'a: 'c, 'b: 'c> {
-    /// Map for the function to call when both parameters are known types.
-    pub known_both: HashMap<
-        DispatcherTypeKey,
-        Box<
-            dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()>
-                + Send
-                + Sync
-                + 'c,
-        >,
-    >,
-    /// Map for the functions to try when first parameters is unknown.
-    pub known_first: HashMap<
-        TypeId,
-        Vec<
-            Box<
-                dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()>
-                    + Send
-                    + Sync
-                    + 'c,
-            >,
-        >,
-    >,
-    /// Map for the functions to try when second parameters is unknown.
-    pub known_second: HashMap<
-        TypeId,
-        Vec<
-            Box<
-                dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()>
-                    + Send
-                    + Sync
-                    + 'c,
-            >,
-        >,
-    >,
-    /// Map for the functions to try when both parameters are unknown.
-    pub known_none: Vec<
-        Box<
-            dyn Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()>
-                + Send
-                + Sync
-                + 'c,
-        >,
-    >,
+pub trait IntersectionWithDispatcher: Send + Sync {
+    fn intersection_with_dispatcher(
+        &self,
+        dispatcher: &ComposableQueryDispatcher,
+        pos12: &Isometry<Real>,
+        s1: &dyn Shape,
+        s2: &dyn Shape,
+    ) -> Result<bool, ()>;
+}
+pub struct BoxedIntersectionWithDispatcher(Box<dyn IntersectionWithDispatcher>);
+impl IntersectionWithDispatcher for BoxedIntersectionWithDispatcher {
+    fn intersection_with_dispatcher(
+        &self,
+        dispatcher: &ComposableQueryDispatcher,
+        pos12: &Isometry<Real>,
+        s1: &dyn Shape,
+        s2: &dyn Shape,
+    ) -> Result<bool, ()> {
+        self.0
+            .intersection_with_dispatcher(dispatcher, pos12, s1, s2)
+    }
+}
+impl IntersectionWithDispatcher for fn(&Isometry<Real>, &dyn Shape, &dyn Shape) -> bool {
+    fn intersection_with_dispatcher(
+        &self,
+        _dispatcher: &ComposableQueryDispatcher,
+        pos12: &Isometry<Real>,
+        s1: &dyn Shape,
+        s2: &dyn Shape,
+    ) -> Result<bool, ()> {
+        Ok(self(pos12, s1, s2))
+    }
+}
+/*
+impl IntersectionWithDispatcher
+    for fn(&ComposableQueryDispatcher, &Isometry<Real>, &dyn Shape, &dyn Shape) -> bool
+{
+    fn intersection_with_dispatcher(
+        &self,
+        dispatcher: &ComposableQueryDispatcher,
+        pos12: &Isometry<Real>,
+        other: &dyn Shape,
+    ) -> bool {
+        self(dispatcher, pos12, other, other)
+    }
+}*/
+
+impl<F> IntersectionWithDispatcher for F
+where
+    F: Fn(&ComposableQueryDispatcher, &Isometry<Real>, &dyn Shape, &dyn Shape) -> Result<bool, ()>
+        + Send
+        + Sync,
+{
+    fn intersection_with_dispatcher(
+        &self,
+        dispatcher: &ComposableQueryDispatcher,
+        pos12: &Isometry<Real>,
+        s1: &dyn Shape,
+        s2: &dyn Shape,
+    ) -> Result<bool, ()> {
+        self(dispatcher, pos12, s1, s2)
+    }
 }
 
-impl<'c, 'a: 'c, 'b: 'c> core::fmt::Debug for FunctionDispatch<'c, 'a, 'b> {
+pub struct FunctionDispatch {
+    /// Map for the function to call when both parameters are known types.
+    pub functions: HashMap<DispatcherTypeKey, Box<dyn IntersectionWithDispatcher + 'static>>,
+}
+
+impl core::fmt::Debug for FunctionDispatch {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FunctionDispatch")
-            .field("known_both", &self.known_both.keys())
-            .field("known_first", &self.known_first.keys())
-            .field("known_second", &self.known_second.keys())
-            .field("known_none", &self.known_none.len())
+            .field("known_both", &self.functions.keys())
             .finish()
     }
 }
 
-impl<'c, 'a: 'c, 'b: 'c> FunctionDispatch<'c, 'a, 'b> {
+impl FunctionDispatch {
     pub fn new() -> Self {
         Self {
-            known_both: HashMap::new(),
-            known_first: HashMap::new(),
-            known_second: HashMap::new(),
-            known_none: Vec::new(),
+            functions: HashMap::new(),
         }
     }
-
-    pub fn add_function_known_12<S1: Shape + 'a, S2: Shape + 'b>(
+    pub fn add_function_known_12<S1: Shape, S2: Shape>(
         &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a S1, &'b S2) -> bool + 'c + Send + Sync + Copy,
+        inner: impl Fn(&Isometry<Real>, &S1, &S2) -> bool + 'static + Send + Sync + Copy,
     ) {
         if self
-            .known_both
+            .functions
             .insert(
                 DispatcherTypeKey(TypeId::of::<S1>(), TypeId::of::<S2>()),
                 Box::new(
-                    move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
+                    move |_dispatcher: &ComposableQueryDispatcher,
+                          pose: &Isometry<Real>,
+                          s1: &dyn Shape,
+                          s2: &dyn Shape| {
                         let shape1 = s1.as_shape::<S1>().ok_or(())?;
                         let shape2 = s2.as_shape::<S2>().ok_or(())?;
                         Ok(inner(pose, shape1, shape2))
@@ -105,160 +126,140 @@ impl<'c, 'a: 'c, 'b: 'c> FunctionDispatch<'c, 'a, 'b> {
         }
     }
 
-    pub fn add_function_known_1<S1: Shape + 'a>(
+    pub fn add_function_known_1x<S1: Shape>(
         &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a S1, &'b dyn Shape) -> bool + 'c + Send + Sync + Copy,
+        inner: impl Fn(&Isometry<Real>, &S1, &dyn Shape) -> bool + 'static + Send + Sync + Copy,
+        tids: Vec<TypeId>,
     ) {
-        let dispatch_second = self.known_first.entry(TypeId::of::<S1>()).or_insert(vec![]);
-        dispatch_second.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
+        for type_s2 in tids {
+            self.add_both_combinations(inner, TypeId::of::<S1>(), type_s2);
+            self.add_both_combinations(inner, TypeId::of::<RoundShape<S1>>(), type_s2);
+        }
+    }
+
+    pub fn add_function_dyn_dispatcher(
+        &mut self,
+        inner: impl Fn(&ComposableQueryDispatcher, &Isometry<Real>, &dyn Shape, &dyn Shape) -> bool
+            + 'static
+            + Send
+            + Sync
+            + Copy,
+        type_s1: TypeId,
+        type_s2: TypeId,
+    ) {
+        self.add_raw_function(
+            type_s1,
+            type_s2,
+            move |dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| { Ok(inner(dispatcher, pose, s1, s2)) },
+        );
+
+        self.add_raw_function(
+            type_s2,
+            type_s1,
+            move |dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| { Ok(inner(dispatcher, &pose.inverse(), s2, s1)) },
+        );
+    }
+
+    fn add_both_combinations<S1: Shape>(
+        &mut self,
+        inner: impl Fn(&Isometry<Real>, &S1, &dyn Shape) -> bool + 'static + Send + Sync + Copy,
+        type_s1: TypeId,
+        type_s2: TypeId,
+    ) {
+        self.add_raw_function(
+            type_s1,
+            type_s2,
+            move |_dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| {
                 let shape1 = s1.as_shape::<S1>().ok_or(())?;
-                let shape2 = s2;
-                Ok(inner(pose, shape1, shape2))
+                Ok(inner(pose, shape1, s2))
             },
-        ));
+        );
+        // add the inverse function
+        self.add_raw_function(
+            type_s2,
+            type_s1,
+            move |_dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| {
+                let shape2 = s2.as_shape::<S1>().ok_or(())?;
+                Ok(inner(&pose.inverse(), shape2, s1))
+            },
+        );
     }
 
-    pub fn add_function_known_2<S2: Shape + 'b>(
+    pub fn add_raw_function(
         &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a dyn Shape, &'b S2) -> bool + 'c + Send + Sync + Copy,
+        type_s1: TypeId,
+        type_s2: TypeId,
+        function: impl IntersectionWithDispatcher + 'static + Send + Sync + Copy,
     ) {
-        let dispatch_second = self.known_first.entry(TypeId::of::<S2>()).or_insert(vec![]);
-        dispatch_second.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &'a dyn Shape, s2: &'b dyn Shape| {
-                let shape1 = s1;
-                let shape2 = s2.as_shape::<S2>().ok_or(())?;
-                Ok(inner(pose, shape1, shape2))
-            },
-        ));
+        if self
+            .functions
+            .insert(DispatcherTypeKey(type_s1, type_s2), Box::new(function))
+            .is_some()
+        {
+            warn!(
+                "Overwriting function for types {:?} and {:?}",
+                type_s1, type_s2
+            );
+        }
     }
 
-    pub fn add_function_known_1_and_support_map<S1: Shape + 'a>(
+    fn add_both_combinations_dispatcher<S1: Shape>(
         &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a S1, &'b dyn SupportMap) -> bool + 'c + Send + Sync + Copy,
+        inner: impl Fn(&ComposableQueryDispatcher, &Isometry<Real>, &S1, &dyn Shape) -> bool
+            + 'static
+            + Send
+            + Sync
+            + Copy,
+        type_s1: TypeId,
+        type_s2: TypeId,
     ) {
-        let dispatch_second = self.known_first.entry(TypeId::of::<S1>()).or_insert(vec![]);
-        dispatch_second.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
+        self.add_raw_function(
+            type_s1,
+            type_s2,
+            move |dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| {
                 let shape1 = s1.as_shape::<S1>().ok_or(())?;
-                let shape2 = s2.as_support_map().ok_or(())?;
-                Ok(inner(pose, shape1, shape2))
+                Ok(inner(dispatcher, pose, shape1, s2))
             },
-        ));
-    }
-
-    pub fn add_function_known_2_and_support_map<S2: Shape + 'b>(
-        &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a dyn SupportMap, &'b S2) -> bool + 'c + Send + Sync + Copy,
-    ) {
-        let dispatch_second = self.known_first.entry(TypeId::of::<S2>()).or_insert(vec![]);
-        dispatch_second.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                let shape1 = s1.as_support_map().ok_or(())?;
-                let shape2 = s2.as_shape::<S2>().ok_or(())?;
-                Ok(inner(pose, shape1, shape2))
+        );
+        // add the inverse function
+        self.add_raw_function(
+            type_s2,
+            type_s1,
+            move |dispatcher: &ComposableQueryDispatcher,
+                  pose: &Isometry<Real>,
+                  s1: &dyn Shape,
+                  s2: &dyn Shape| {
+                let shape2 = s2.as_shape::<S1>().ok_or(())?;
+                Ok(inner(dispatcher, &pose.inverse(), shape2, s1))
             },
-        ));
-    }
-
-    pub fn add_function_all_unknown(
-        &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a dyn Shape, &'b dyn Shape) -> Result<bool, ()>
-            + 'c
-            + Send
-            + Sync
-            + Copy,
-    ) {
-        self.known_none.push(Box::new(inner));
-    }
-
-    pub fn add_function_all_unknown_support_map(
-        &mut self,
-        inner: impl Fn(&Isometry<Real>, &'a dyn SupportMap, &'b dyn SupportMap) -> bool
-            + 'c
-            + Send
-            + Sync
-            + Copy,
-    ) {
-        self.known_none.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                let shape1 = s1.as_support_map().ok_or(())?;
-                let shape2 = s2.as_support_map().ok_or(())?;
-                Ok(inner(pose, shape1, shape2))
-            },
-        ));
-    }
-
-    pub fn add_function_composite_shape_1<'d: 'c, D>(
-        &mut self,
-        dispatcher: &'d D,
-        inner: impl Fn(&D, &Isometry<Real>, &'a dyn SimdCompositeShape, &'b dyn Shape) -> bool
-            + 'c
-            + Send
-            + Sync
-            + Copy,
-    ) where
-        D: ?Sized + crate::query::QueryDispatcher,
-    {
-        self.known_none.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                let shape1 = s1.as_composite_shape().ok_or(())?;
-                let shape2 = s2;
-                Ok(inner(dispatcher, pose, shape1, shape2))
-            },
-        ));
-    }
-    pub fn add_function_composite_shape_2<'d: 'c, D>(
-        &mut self,
-        dispatcher: &'d D,
-        inner: impl Fn(&D, &Isometry<Real>, &'a dyn Shape, &'b dyn SimdCompositeShape) -> bool
-            + 'c
-            + Send
-            + Sync
-            + Copy,
-    ) where
-        D: ?Sized + crate::query::QueryDispatcher,
-    {
-        self.known_none.push(Box::new(
-            move |pose: &Isometry<Real>, s1: &dyn Shape, s2: &dyn Shape| {
-                let shape1 = s1;
-                let shape2 = s2.as_composite_shape().ok_or(())?;
-                Ok(inner(dispatcher, pose, shape1, shape2))
-            },
-        ));
+        );
     }
 
     pub fn dispatch(
         &self,
+        dispatcher: &ComposableQueryDispatcher,
         pose: &Isometry<Real>,
         s1: &dyn Shape,
         s2: &dyn Shape,
     ) -> Result<bool, ()> {
         let key = DispatcherTypeKey(s1.type_id(), s2.type_id());
-        if let Some(func) = self.known_both.get(&key) {
-            return func(pose, s1, s2);
-        }
-
-        if let Some(funcs) = self.known_first.get(&s1.type_id()) {
-            for func in funcs {
-                if let Ok(res) = func(pose, s1, s2) {
-                    return Ok(res);
-                }
-            }
-        }
-
-        if let Some(funcs) = self.known_second.get(&s2.type_id()) {
-            for func in funcs {
-                if let Ok(res) = func(pose, s1, s2) {
-                    return Ok(res);
-                }
-            }
-        }
-
-        for func in &self.known_none {
-            if let Ok(res) = func(pose, s1, s2) {
-                return Ok(res);
-            }
+        if let Some(func) = self.functions.get(&key) {
+            return func.intersection_with_dispatcher(dispatcher, pose, s1, s2);
         }
 
         Err(())
