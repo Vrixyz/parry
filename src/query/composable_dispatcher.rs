@@ -4,6 +4,8 @@
 
 mod function_dispatch;
 mod intersection;
+
+pub use intersection::*;
 #[cfg(test)]
 mod tests;
 

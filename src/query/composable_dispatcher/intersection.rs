@@ -76,6 +76,8 @@ pub fn create_intersection_dispatcher() -> FunctionDispatch {
             TypeId::of::<Cone>(),
             #[cfg(feature = "dim2")]
             TypeId::of::<ConvexPolygon>(),
+            #[cfg(feature = "dim3")]
+            TypeId::of::<ConvexPolyhedron>(),
             TypeId::of::<Cuboid>(),
             #[cfg(feature = "dim3")]
             TypeId::of::<Cylinder>(),
@@ -96,6 +98,34 @@ pub fn create_intersection_dispatcher() -> FunctionDispatch {
             TypeId::of::<RoundShape<Segment>>(),
             TypeId::of::<RoundShape<Triangle>>(),
         ],
+    );
+    fn intersection_test_sm_sm(
+        _: &query::composable_dispatcher::ComposableQueryDispatcher,
+        pos12: &crate::math::Isometry<crate::math::Real>,
+        s1: &dyn Shape,
+        s2: &dyn Shape,
+    ) -> Result<bool, ()> {
+        Ok(query::details::intersection_test_support_map_support_map(
+            pos12,
+            s1.as_support_map().unwrap(),
+            s2.as_support_map().unwrap(),
+        ))
+    }
+    // TODO: add support map support map
+    #[cfg(feature = "dim3")]
+    dispatcher.add_raw_function(
+        TypeId::of::<ConvexPolyhedron>(),
+        TypeId::of::<ConvexPolyhedron>(),
+        |_: &query::composable_dispatcher::ComposableQueryDispatcher,
+         pos12: &crate::math::Isometry<crate::math::Real>,
+         s1: &dyn Shape,
+         s2: &dyn Shape| {
+            Ok(query::details::intersection_test_support_map_support_map(
+                pos12,
+                s1.as_support_map().unwrap(),
+                s2.as_support_map().unwrap(),
+            ))
+        },
     );
 
     // TODO: add composite shapes
