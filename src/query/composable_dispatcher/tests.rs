@@ -30,8 +30,10 @@ mod tests2d {
         .unwrap());
 
         let pos12 = ball_pos_disjoint.inv_mul(&cuboid_pos);
-        assert!(!ComposableQueryDispatcher
-            .intersection_test(&pos12, &ball, &cuboid)
-            .unwrap());
+        assert!(!ComposableQueryDispatcher {
+            intersections: create_intersection_dispatcher()
+        }
+        .intersection_test(&pos12, &ball, &cuboid)
+        .unwrap());
     }
 }

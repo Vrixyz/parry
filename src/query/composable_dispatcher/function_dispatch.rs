@@ -1,5 +1,5 @@
+use crate::utils::hashmap::HashMap;
 use core::any::TypeId;
-use std::collections::HashMap;
 
 use log::warn;
 
@@ -94,7 +94,7 @@ impl core::fmt::Debug for FunctionDispatch {
 impl FunctionDispatch {
     pub fn new() -> Self {
         Self {
-            functions: HashMap::new(),
+            functions: HashMap::default(),
         }
     }
     pub fn add_function_known_12<S1: Shape, S2: Shape>(
