@@ -46,6 +46,8 @@ pub use self::split::{IntersectResult, SplitResult};
 
 mod clip;
 pub mod closest_points;
+#[cfg(feature = "std")]
+pub mod composable_dispatcher;
 pub mod contact;
 #[cfg(feature = "std")]
 mod contact_manifolds;
