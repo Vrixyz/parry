@@ -1,0 +1,26 @@
+[package]
+name = "rerun_logger"
+version = "0.0.1"
+authors = ["Thierry Berger <contact@thierryberger.com>"]
+
+description = "3 dimensional collision detection library in Rust."
+documentation = "https://parry.rs/docs"
+homepage = "https://parry.rs"
+repository = "https://github.com/dimforge/parry"
+readme = "README.md"
+keywords = ["collision", "geometry", "distance", "ray", "convex"]
+categories = ["science", "game-development", "mathematics", "wasm"]
+license = "Apache-2.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+name = "rerun_logger"
+
+[dependencies]
+log = { version = "0.4", features = ["kv", "kv_sval", "kv_serde"] }
+rerun = "0.22"
+serde_json = "*"
+parry3d = "*"

@@ -21,6 +21,7 @@ pub fn try_convex_hull(
     }
 
     // print_buildable_vec("input", points);
+    log::debug!(points:serde; "Input points");
 
     let mut normalized_points = points.to_vec();
     let _ = normalize(&mut normalized_points[..]);
@@ -40,6 +41,7 @@ pub fn try_convex_hull(
             return Ok((vertices, indices));
         }
     }
+    log::debug!(rerun_vec_triangles:serde = triangles, points:serde = normalized_points, rerun_inc_time = 1; "Facets");
 
     let mut i = 0;
     while i != triangles.len() {

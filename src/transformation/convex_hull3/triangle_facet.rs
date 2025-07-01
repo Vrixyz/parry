@@ -1,9 +1,11 @@
 use crate::math::Real;
 use crate::shape::Triangle;
 use alloc::vec::Vec;
+use log::kv::ToValue;
 use na::{Point3, Vector3};
 use num::Bounded;
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
 pub struct TriangleFacet {
     pub valid: bool,
@@ -15,6 +17,13 @@ pub struct TriangleFacet {
     pub visible_points: Vec<usize>,
     pub furthest_point: usize,
     pub furthest_distance: Real,
+}
+
+impl ToValue for TriangleFacet {
+    fn to_value(&self) -> log::kv::Value {
+        // TODO: save a deserializable value, maybe a `Fill`?
+        log::kv::Value::from_debug(self)
+    }
 }
 
 impl TriangleFacet {
