@@ -55,6 +55,7 @@ wavefront = ["obj"]
 alloc = ["nalgebra/alloc", "hashbrown"]
 spade = ["dep:spade", "alloc"]
 improved_fixed_point_support = []
+log_kv_serde = ["log/kv_serde", "serde-serialize"]
 
 # Do not enable this feature directly. It is automatically
 # enabled with the "simd-stable" or "simd-nightly" feature.
@@ -66,6 +67,7 @@ path = "../../src/lib.rs"
 required-features = ["required-features"]
 
 [dependencies]
+log = { version = "0.4" }
 either = { version = "1", default-features = false }
 bitflags = "2.3"
 downcast-rs = { version = "2", default-features = false, features = ["sync"] }
@@ -85,7 +87,6 @@ hashbrown = { version = "0.15", optional = true, default-features = false, featu
 spade = { version = "2.9", optional = true, default-features = false }
 rayon = { version = "1", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
-log = "0.4"
 ordered-float = { version = "5", default-features = false }
 thiserror = { version = "2", default-features = false }
 rstar = "0.12.0"
@@ -100,6 +101,8 @@ macroquad = "0.4.12"
 nalgebra = { version = "0.33", default-features = false, features = ["rand"] }
 rand_isaac = "0.3"
 rerun = "*"
+rerun_logger = { path = "../rerun_logger" }
+serde_json = "*"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["-Zunstable-options", "--generate-link-to-definition"]
