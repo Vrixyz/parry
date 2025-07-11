@@ -19,8 +19,6 @@ pub use self::polygon_intersection::{
     convex_polygons_intersection_with_tolerances, polygons_intersection,
     polygons_intersection_points,
 };
-#[cfg(feature = "dim2")]
-pub use convex_hull2::TriangleFacet;
 #[cfg(feature = "dim3")]
 pub use convex_hull3::TriangleFacet;
 

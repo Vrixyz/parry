@@ -3,7 +3,7 @@ use super::{ConvexHullError, TriangleFacet};
 use crate::math::Real;
 use crate::transformation::convex_hull_utils::indexed_support_point_nth;
 use crate::transformation::convex_hull_utils::{indexed_support_point_id, normalize};
-use crate::utils;
+use crate::{log_kv, utils};
 use alloc::{vec, vec::Vec};
 use na::{self, Point3};
 
@@ -21,7 +21,7 @@ pub fn try_convex_hull(
     }
 
     // print_buildable_vec("input", points);
-    log::debug!(points:serde; "Input points");
+    log_kv!(debug, points:serde; "Input points");
 
     let mut normalized_points = points.to_vec();
     let _ = normalize(&mut normalized_points[..]);
@@ -41,7 +41,12 @@ pub fn try_convex_hull(
             return Ok((vertices, indices));
         }
     }
-    log::debug!(rerun_vec_triangles:serde = triangles, points:serde = normalized_points, rerun_inc_time = 1; "Facets");
+    log_kv!(
+        debug, rerun_inc_time = 1, parry_vec_triangles:serde = triangles, points:serde = normalized_points; "Facets"
+    );
+    log_kv!(
+        debug, rerun_inc_time = 1, clear = "Facets"; "Clear Facets"
+    );
 
     let mut i = 0;
     while i != triangles.len() {
@@ -140,6 +145,18 @@ pub fn try_convex_hull(
 
     let mut idx = Vec::new();
 
+    log_kv!(
+        debug,
+        parry_vec_triangles:serde = {
+            let mut valid_triangles = triangles.clone();
+            valid_triangles.retain(|f| f.valid);
+            valid_triangles
+        },
+        points:serde = normalized_points; "Valid_Facets"
+    );
+    log_kv!(
+        debug, rerun_inc_time = 1, clear = "Valid_Facets"; "Clear Facets"
+    );
     for facet in triangles.iter() {
         if facet.valid {
             idx.push([

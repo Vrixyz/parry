@@ -55,6 +55,7 @@ wavefront = ["obj"]
 alloc = ["nalgebra/alloc", "hashbrown"]
 spade = ["dep:spade", "alloc"]
 improved_fixed_point_support = []
+log_kv_serde = ["log/kv_serde", "serde-serialize"]
 
 # Do not enable this feature directly. It is automatically
 # enabled with the "simd-stable" or "simd-nightly" feature.
@@ -66,7 +67,7 @@ path = "../../src/lib.rs"
 required-features = ["required-features"]
 
 [dependencies]
-log = { version = "0.4", features = ["kv", "kv_sval", "kv_serde"] }
+log = { version = "0.4" }
 either = { version = "1", default-features = false }
 bitflags = "2.3"
 downcast-rs = { version = "2", default-features = false, features = ["sync"] }

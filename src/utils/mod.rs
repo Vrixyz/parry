@@ -55,6 +55,8 @@ pub mod hashset;
 mod interval;
 mod inv;
 mod isometry_ops;
+#[macro_use]
+mod log_kv;
 mod median;
 mod obb;
 mod point_cloud_support_point;

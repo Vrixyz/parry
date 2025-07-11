@@ -6,7 +6,7 @@ use na::{Point3, Vector3};
 use num::Bounded;
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TriangleFacet {
     pub valid: bool,
     pub affinely_dependent: bool,

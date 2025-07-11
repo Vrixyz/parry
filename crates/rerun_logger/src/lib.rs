@@ -1,12 +1,6 @@
-use std::{
-    cell::RefCell,
-    sync::{atomic::AtomicU32, Arc, RwLock},
-};
+use std::sync::atomic::AtomicU32;
 
-use log::{
-    kv::{Key, Value},
-    Log, Record,
-};
+use log::{Log, Record};
 pub mod parry;
 
 pub struct RerunLogger;
@@ -24,7 +18,7 @@ pub fn init_rr() {
             .unwrap()
     });
 
-    get_rr().set_time_seconds("frame_idx", 0);
+    get_rr().set_duration_secs("sim_time", 0);
 }
 
 pub fn get_rr() -> &'static rerun::RecordingStream {
@@ -48,7 +42,6 @@ impl Log for RerunLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
-        // TODO: check key values, if that's for rerun, log it.
         std::println!(
             "{}:{} -- {}",
             record.level(),

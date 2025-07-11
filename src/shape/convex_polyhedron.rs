@@ -667,14 +667,10 @@ impl ConvexPolyhedron for ConvexPolyhedron {
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
-    use std::boxed::Box;
-
-    use na::Vector3;
-    use rerun::{LineStrip3D, LineStrips3D, Position3D, Vec3D};
 
     use crate::{
+        log_kv,
         shape::{TopologyError, TriMeshFlags},
-        transformation::TriangleFacet,
     };
 
     use super::*;
@@ -682,9 +678,12 @@ mod tests {
     #[test]
     fn test_311_convex_hull() {
         log::set_max_level(log::LevelFilter::Debug);
-        rerun_logger::init_rr();
-        rerun_logger::parry::init_parry_types();
-        log::set_logger(&rerun_logger::RERUN_LOGGER);
+        #[cfg(feature = "log_kv_serde")]
+        {
+            rerun_logger::init_rr();
+            rerun_logger::parry::init_parry_types();
+            log::set_logger(&rerun_logger::RERUN_LOGGER);
+        }
 
         let points: Vec<Point<Real>> = vec![
             [-0.9759494, 0.08367488, 1.1975889].into(),
@@ -697,7 +696,9 @@ mod tests {
         let convex = ConvexPolyhedron::from_convex_hull(&points)
             .expect("Failed to compute convex hull of mesh");
 
-        let (vertices, mut indices) = convex.to_trimesh();
+        let (vertices, indices) = convex.to_trimesh();
+        log_kv!(debug, vertices:serde = &vertices, indices:serde = &indices; "to_trimesh");
+
         let mut convex_mesh = crate::shape::TriMesh::new(vertices, indices)
             .expect("Failed to convert convex polyhedron to triangle mesh");
 

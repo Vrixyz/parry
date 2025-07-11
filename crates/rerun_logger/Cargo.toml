@@ -21,6 +21,6 @@ name = "rerun_logger"
 
 [dependencies]
 log = { version = "0.4", features = ["kv", "kv_sval", "kv_serde"] }
-rerun = "0.22"
+rerun = "0.23"
 serde_json = "*"
-parry3d = "*"
+parry3d = { version = "0.21", features = ["serde-serialize"] }
